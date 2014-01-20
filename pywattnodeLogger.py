@@ -173,7 +173,7 @@ def detectDev(log,str):
     
 
 def main():
-    log, tty = createLogger('/var/log/pywattnode.log')
+    log, tty = createLogger('pywattnode.log')#createLogger('/var/log/pywattnode.log')
     config = readConfig(log, '/etc/pywattnode.conf')        
     
     port_prefix = config.get('wattnode', 'port')

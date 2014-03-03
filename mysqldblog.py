@@ -1,4 +1,8 @@
-import MySQLdb
+try:
+	import MySQLdb
+except ImportError:
+	MySQLdb = None
+
 from warnings import filterwarnings
 import traceback
 

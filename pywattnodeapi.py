@@ -68,24 +68,24 @@ def dumpHex(src, length=8):
         result.append("%04X   %-*s   %s\n" % (i, length*3, hexa, printable))
     return ''.join(result)
 
-def decodeAscii(s, res=None):    
+def decodeAscii(s, res=None):
     return s
 
-def decodeInt16(s, res=None):    
+def decodeInt16(s, res=None):
     if s != None and len(s)>=2:
         if res == None:
             res = []
-            
+
         res.append(struct.unpack(">H", s[:2])[0])
         return decodeInt16(s[2:],res)
     else:
         return res
 
-def decodeInt32(s, res= None):    
+def decodeInt32(s, res= None):
     if s != None and len(s)>=4:
         if res == None:
             res = []
-            
+
         # swap order of registers
         # so everything is big endian
         x = s[2:4]
@@ -94,17 +94,17 @@ def decodeInt32(s, res= None):
         return decodeInt32(s[4:],res)
     else:
         return res
-    
+
 def decodeFloat32(s, res = None):
     if s != None and len(s)>= 4:
         if res == None:
             res = []
-            
+
         # swap order of registers
         # so everything is big endian
         x = s[2:4]
         x+= s[:2]
-    
+
         result = struct.unpack(">f",x)[0]
         res.append(result)
         return decodeFloat32(s[4:], res)
@@ -119,7 +119,7 @@ def decodeBasicFp(s):
         ofs += 4
     #print 'basic fp:', regs
     return regs
- 
+
 def decodeAdvancedFp(s):
     regs = {}
     ofs = 0
@@ -133,7 +133,7 @@ def decodeAdvancedFp(s):
 def makeIdent(saddr=0):
     data = struct.pack(">BB", saddr, 0x11)
     data += struct.pack("<H",computeCRC(data))
-    return data    
+    return data
 def makeWriteReg(saddr=0, regaddr=0, value=0):
     data = struct.pack(">BBHH",saddr,6,regaddr,value)
     data += struct.pack("<H",computeCRC(data))
@@ -155,7 +155,7 @@ def makeReadReg(saddr=0, regaddr=0, regcnt=0, fnc=4):
     data += struct.pack(">H",regaddr)
     data += struct.pack(">H",regcnt)
     data += struct.pack("<H",computeCRC(data))
-    
+
     return data
 
 def decodeRaw(s):
@@ -163,7 +163,7 @@ def decodeRaw(s):
 
 class ModbusException(Exception):
     """Base class for modbus related exceptions."""
-    
+
 #-----------------------------------------------------------------------
 # Client
 #-----------------------------------------------------------------------
@@ -173,7 +173,7 @@ class SerialModbusClient ():
     '''
     #mindelay = datetime.timedelta(milliseconds=3.6)
     mindelay = datetime.timedelta(milliseconds=75.0)
-    # powerscout needs a longer min delay 
+    # powerscout needs a longer min delay
     # wattnode can work with 3.6ms
     def __init__(self, log = None):
         #self.log = logging.getLogger("wattnodeapi")
@@ -183,7 +183,7 @@ class SerialModbusClient ():
         else:
             self.log = logging.getLogger('modbus')
         self.lastReq = datetime.datetime.now()
-        # create console handler 
+        # create console handler
         #ch = logging.StreamHandler()
         #logging.basicConfig()
         # create formatter
@@ -192,37 +192,37 @@ class SerialModbusClient ():
         #ch.setFormatter(formatter)
         # add ch to logger
         #self.log.addHandler(ch)
-        
+
     def open(self, port='/dev/ttyS0', baudrate=9600):
         # 8N1 is default
         # 1 second timeout
-        self.ser = serial.Serial(port, baudrate, timeout=2)         
-    
+        self.ser = serial.Serial(port, baudrate, timeout=2)
+
     def detectDevs(self):
         """send a ReportSlaveID message to the broadcast address"""
-        
+
         self.log.info ('Searching for modbus devices')
-        
+
         oldtimeout= self.ser.timeout
         self.ser.timeout = 0.1
         devs = {}
-        
+
         for i in range(1,256):
             try:
                 resp = self.doRequest(makeReadReg(i, 1700,2),decodeInt32)
-                print 'got', resp 
+                print 'got', resp
             except ModbusException:
                 pass
-            
+
             self.ser.flushInput()
-        
+
         self.ser.timeout = oldtimeout
     def close(self):
         self.ser.close()
     def _handleError(self, s):
         self.log.debug("recv: %s" % (dumpHex(s)))
-        if computeCRC(s) == 0:                     
-            code = struct.unpack("B",s[2])[0] 
+        if computeCRC(s) == 0:
+            code = struct.unpack("B",s[2])[0]
             if code == 2 :
                 self.log.warning("Illegal Data Address")
                 raise ModbusException("Illegal Data Address")
@@ -239,23 +239,23 @@ class SerialModbusClient ():
 
     def _handleRead(self, decoder):
         # this reading structure only works for 0x4 type messages...
-        s = self.ser.read(3) # addr, fcode, byte count                    
-                    
-        if len(s) >0:                        
+        s = self.ser.read(3) # addr, fcode, byte count
+
+        if len(s) >0:
             code = struct.unpack("B",s[1])[0]
-            
-            if (code & 0x80) == 0x80:                    
-                s += self.ser.read(2) # CRC                
+
+            if (code & 0x80) == 0x80:
+                s += self.ser.read(2) # CRC
                 self._handleError(s)
             else:
                 pklen = struct.unpack("B",s[2])[0]
                 s+= self.ser.read(pklen+2) # include crc bytes
-                
+
                 if computeCRC(s) == 0 :
                     #self.log.debug("  crc is valid")
                     #self.log.debug(dumpHex(s))
                     self.log.debug("recv: %s" % (dumpHex(s)))
-                    
+
                     #strip control bytes and last two crc bytes
                     return decoder(s[3:-2])
                 else:
@@ -263,12 +263,12 @@ class SerialModbusClient ():
                     #self.log.warning(dumpHex(s))
                     self.log.debug("recv: %s" % (dumpHex(s)))
                     raise ModbusException("invalid crc")
-        else:                
+        else:
             raise ModbusException("Modbus timeout")
-    def _handleWrite(self):    
-        s = self.ser.read(2) # addr, fcode                                    
-        if len(s) >0:                        
-            code = struct.unpack("B",s[1])[0]                        
+    def _handleWrite(self):
+        s = self.ser.read(2) # addr, fcode
+        if len(s) >0:
+            code = struct.unpack("B",s[1])[0]
             if (code & 0x80) == 0x80:
                 #error bit is set
                 s += self.ser.read(3) # exception code + CRC
@@ -281,44 +281,44 @@ class SerialModbusClient ():
                     self.log.warning("invalid crc")
                     self.log.warning(dumpHex(s))
                     raise ModbusException("invalid crc")
-        else:                
+        else:
             raise ModbusException("Modbus timeout")
     def doRequest(self, req=None, decoder=decodeRaw):
-        if req != None:                            
+        if req != None:
             self.log.debug("send: %s" % (dumpHex(req)))
-            
-            td = datetime.datetime.now() - self.lastReq            
-            # need at least 3.6 milliseconds between response and next command, enforce delay here            
+
+            td = datetime.datetime.now() - self.lastReq
+            # need at least 3.6 milliseconds between response and next command, enforce delay here
             if td < SerialModbusClient.mindelay:
-                delay = SerialModbusClient.mindelay - td 
+                delay = SerialModbusClient.mindelay - td
                 #self.log.warn ('too fast, inserting delay of %d ms'%(delay.microseconds/1000.0))
                 time.sleep(delay.microseconds/1000000.0) # in seconds
-                
+
             # sanity check
             td = datetime.datetime.now() - self.lastReq
             if td < SerialModbusClient.mindelay:
                 self.log.error('timing sanity check failed')
-            
+
             self.ser.write(req)
-            
+
             addr,fc = struct.unpack("BB", req[0:2])
 
             # bcast does not generate a response
             s = None
             if addr != 0xff:
                 if fc == 0x03 or fc == 0x04:
-                    s = self._handleRead(decoder)            
+                    s = self._handleRead(decoder)
                 elif fc == 0x06:
                     s = self._handleWrite()
                 elif fc == 0x11:
                     s = self._handleRead(decodeAscii)
                 else:
                     raise ModbusException("unsupported function code")
-            
+
             self.lastReq = datetime.datetime.now()
-            
+
             return s
-    
+
 #-----------------------------------------------------------------------
 # Test code
 #-----------------------------------------------------------------------
@@ -388,7 +388,7 @@ __wattNodeAdvancedVars = [
 "Demand",
 "DemandMin",
 "DemandMax",
-"DemandApp"                          
+"DemandApp"
 ]
 __wattNodeCurrentVars = [
 "CurrentA",
@@ -434,94 +434,102 @@ if __name__ == "__main__":
     log.setLevel(logging.INFO)
     ch = logging.StreamHandler()
     log.addHandler(ch)
-    
+
     addresses = [ {'address': 1}]
     port = '/dev/ttyUSB0'
-    
+
     log.info ("Opening '%s'" % (port))
-    
-    p = SerialModbusClient(log); 
+
+    p = SerialModbusClient(log);
     p.open(port)
-        
+
     # read the wattnode id
     serNos =[]
     for address in addresses:
         serno = p.doRequest(makeReadReg(
                 address['address'], 1700,2),decodeInt32) [0]
         address['serno'] = serno
-        
+
         # turn off averaging
         p.doRequest(makeWriteReg(address['address'],1607,0))
-        
-        # setup for 15A ct
-        p.doRequest(makeWriteReg(address['address'],1602,15))    
-    
+
+        # setup for 200A ct
+        p.doRequest(makeWriteReg(address['address'],1602,200))
+
     for address in addresses:
         print "Watt-node on address %d reported serial number: %d" % \
              (address['address'], address['serno'])
-    
+
     items = []
-    
+
     for address in addresses:
         items.append(
-        {"name":"WATT_%s_EnergySum"%(address['serno']), 
-        "cmd": makeReadReg(address['address'],1000,2), 
+                {"name":"WATT_%s_PowerSum"%(address['serno']),
+                 "cmd": makeReadReg(address['address'], 1008, 2),
+                 "decode":decodeFloat32,
+                 "interval":datetime.timedelta(seconds=1),
+                 "last":datetime.datetime.min})
+
+
+        items.append(
+        {"name":"WATT_%s_EnergySum"%(address['serno']),
+        "cmd": makeReadReg(address['address'],1000,2),
         "decode":decodeFloat32,
         "interval":datetime.timedelta(minutes=5),
         "last":datetime.datetime.min})
-        
+
         items.append(
-        {"name":"WATT_%s_RealPower"%(address['serno']), 
-        "cmd": makeReadReg(address['address'],1008,2), 
+        {"name":"WATT_%s_RealPower"%(address['serno']),
+        "cmd": makeReadReg(address['address'],1008,2),
         "decode":decodeFloat32,
         "interval":datetime.timedelta(seconds=1),
         "last":datetime.datetime.min})
 
-        items.append(        
-        {"name":"WATT_%s_ReactivePower"%(address['serno']), 
-        "cmd": makeReadReg(address['address'],1146,2), 
+        items.append(
+        {"name":"WATT_%s_ReactivePower"%(address['serno']),
+        "cmd": makeReadReg(address['address'],1146,2),
         "decode":decodeFloat32,
         "interval":datetime.timedelta(seconds=1),
         "last":datetime.datetime.min})
-                
+
         items.append(
-        {"name":"WATT_%s_Volt"%(address['serno']), 
-        "cmd": makeReadReg(address['address'],1016,2), 
+        {"name":"WATT_%s_Volt"%(address['serno']),
+        "cmd": makeReadReg(address['address'],1016,2),
         "decode":decodeFloat32,
         "interval":datetime.timedelta(seconds=1),
         "last":datetime.datetime.min})
-        
+
         items.append(
-        {"name":"WATT_%s_Freq"%(address['serno']), 
-        "cmd": makeReadReg(address['address'],1032,2), 
+        {"name":"WATT_%s_Freq"%(address['serno']),
+        "cmd": makeReadReg(address['address'],1032,2),
         "decode":decodeFloat32,
         "interval":datetime.timedelta(seconds=1),
-        "last":datetime.datetime.min})             
-        
-    while True:    
+        "last":datetime.datetime.min})
+
+    while True:
         try:
             min = datetime.timedelta(seconds=5)
-            
+
             for cmd in items:
-                now = datetime.datetime.now()                            
+                now = datetime.datetime.now()
                 if (now - cmd["last"] > cmd["interval"]):
                     val = p.doRequest(cmd["cmd"], cmd["decode"])
-                    
+
                     cmd["last"] = now
-                    
+
                     if val == None:
                         print "no response"
                     else:
                         print "%s = %s" % (cmd["name"], val[0])
                      #   c.inT(cmd["name"], "%s"%(val[0]))
-                        
+
                 if (cmd["last"] + cmd["interval"] < now + min):
-                    min = (cmd["last"] + cmd["interval"]) - now  
-                    
+                    min = (cmd["last"] + cmd["interval"]) - now
+
             time.sleep(min.seconds)
 
         except KeyboardInterrupt:
             break
-            
+
     print "Shutting down"
-    p.close()    
+    p.close()

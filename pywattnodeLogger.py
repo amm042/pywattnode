@@ -17,7 +17,7 @@ import logging.handlers
 from mysqldblog import dblogger as mysql_dblogger
 from couchdblog import dblogger as couch_dblogger
 
-def runlog(p, wnconfig, config, log, tty):
+def runlog(p, wnconfig, config, log, tty, serno):
 
     dbtype = config.get('db', 'dbtype')
     if dbtype == 'mysql':
@@ -27,6 +27,9 @@ def runlog(p, wnconfig, config, log, tty):
     elif dbtype == 'plotwatt':
         from plotwatt import dblogger as plotwatt_dblogger
         db = plotwatt_dblogger(config, log)
+    elif dbtype == 'opentsdb':
+        from opentsdb_wn import dblogger 
+        db = dblogger(config, serno)
     else:
         raise Exception("dbtype ('%s') not supported."%(dbtype))
     log.info('database connected')
@@ -40,7 +43,7 @@ def runlog(p, wnconfig, config, log, tty):
             #regs.append (t)
 
         while True:
-            start = datetime.now()
+            start = datetime.utcnow()
 
             output = ""
             for i in range(0, len(wnconfig)):
@@ -71,7 +74,7 @@ def runlog(p, wnconfig, config, log, tty):
             if tty:
                 log.info(output)
 
-            sleep = period_sec - (datetime.now() - start)
+            sleep = period_sec - (datetime.utcnow() - start)
             sleep_s = (sleep.days * 86400) + sleep.seconds + (sleep.microseconds / 1000000.0)
             log.info('took %s seconds; sleep time is %f seconds', period_sec - sleep, sleep_s)
             if sleep_s > 0:
@@ -81,8 +84,8 @@ def runlog(p, wnconfig, config, log, tty):
     finally:
         db.close()
 
-def createLogger(logfile, name="log"):
-    log = logging.getLogger(name)
+def createLogger(logfile):
+    log = logging.getLogger()
     log.setLevel(logging.DEBUG)
 
     #tty= True
@@ -114,7 +117,11 @@ def createLogger(logfile, name="log"):
 
 
     # create formatter
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    
+    LOGFMT = '%(asctime)s %(name)-30s %(levelname)-8s %(message)s'
+    
+    #formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(LOGFMT)
     # add formatter to ch
     ch.setFormatter(formatter)
     # add ch to logger
@@ -202,6 +209,7 @@ def main():
                 p = SerialModbusClient(log)
 
                 success = False
+                serno = None
                 while success == False:
                     try:
                         p.open(port)
@@ -241,7 +249,7 @@ def main():
                 log.info ("Setup complete, starting logger")
 
                 try:
-                    runlog(p, wnconfig, config, log, tty)
+                    runlog(p, wnconfig, config, log, tty, serno)
                 except KeyboardInterrupt:
                     log.critical("Shutting down")
                     p.close()
@@ -250,7 +258,8 @@ def main():
                     log.critical("Exit() called, shutting down")
                     p.close()
                     raise
-                except:
+                except Exception as x:
+                    log.critical(x)
                     log.critical(traceback.format_exc())
 
             finally:

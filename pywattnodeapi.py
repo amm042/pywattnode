@@ -390,6 +390,9 @@ __wattNodeAdvancedVars = [
 "DemandMax",
 "DemandApp"
 ]
+
+wattNodeLogVars = __wattNodeBasicVars + __wattNodeAdvancedVars
+
 __wattNodeCurrentVars = [
 "CurrentA",
 "CurrentB",

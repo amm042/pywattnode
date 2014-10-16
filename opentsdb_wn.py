@@ -96,8 +96,7 @@ class dblogger(threading.Thread):
                                        {'metric': 'wattnode_{}'.format(d['serialnumber']),
                                         'timestamp': d['ts'],
                                         'value': d[param],
-                                        'tags': {'parameter': param,
-                                                 'id': d['id']},
+                                        'tags': {'parameter': param},
                                         }
                                        ]
                         if len(wl) > 0:

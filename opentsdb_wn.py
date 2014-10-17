@@ -1,3 +1,4 @@
+    
 import threading
 import logging
 import Queue
@@ -5,6 +6,8 @@ import sqlite3
 import traceback
 import requests
 import json
+import time
+import random
 #from pywattnodeapi import __wattNodeAdvancedVars, __wattNodeBasicVars
 
 import calendar
@@ -21,23 +24,21 @@ def getUTCTimestampS(dt):
     return int(calendar.timegm(dt.timetuple()))
 
 
-class dblogger(threading.Thread):
-    def __init__(self, config, serno):
-        super(dblogger, self).__init__()
+class opentsdb_thread(threading.Thread):
+    def __init__(self, serno, url, localdb):
+        super(opentsdb_thread, self).__init__()
         self.setDaemon(True)       
-        
-        self.name = "OpenTSDB push thread"
-        
-        self.shutdownEvt = threading.Event()
+        self.name = "OpenTSDB push thread"                
         self.q = Queue.Queue()
+        self.queue_running = False        
+        self.shutdownEvt = threading.Event()
         
-        self.url = config.get('db', 'url')
         self.log = logging.getLogger(__name__)
-        self.log.info("OpenTSDB logger activated on wn_{}".format(serno))
+        self.log.setLevel(logging.DEBUG)
+        self.url = url
+        self.localdb = localdb
         self.serno = serno
-                        
-        self.localdb = config.get('db', 'localdb')
-        
+                
         try:
             db = sqlite3.connect(self.localdb)
             create = """CREATE TABLE IF NOT EXISTS wattnode (
@@ -53,92 +54,122 @@ class dblogger(threading.Thread):
             
             self.start()
         except Exception as x:
-            self.log.error(traceback.format_exc())
-            quit()
-        
+            self.log.critical(x)
+            self.log.critical(traceback.format_exc())
+    
     def run(self):
-        db = sqlite3.connect(self.localdb)
-        count = 0
-        try:        
-            while not self.shutdownEvt.is_set():
-                try:                    
-                    cmd, data = self.q.get(True)
+        try:
+            self.queue_running = True
+            db = sqlite3.connect(self.localdb)
+            count = 0
+            
+            self.log.debug("thread started")
+            try:        
+                while not self.shutdownEvt.is_set():                
                     
-                    if cmd == "log_data":
-                        cr = db.cursor()
-                        sql = "INSERT INTO wattnode VALUES (Null, ?, ?, ?, " + \
-                        ", ".join(["?"]*len(wattNodeLogVars)) + ")"
-                                                                    
-                        cr.execute(sql, [self.serno, 
-                                         getUTCTimestampS(data['time']), 
-                                         True] + \
-                                         [data[x] for x in wattNodeLogVars])
-                        db.commit()
-                        count = count + 1
+                    try:                        
+                        commands = []
+                        datas = []
+                        while not self.q.empty():
+                            commands += [self.q.get(False)]
                         
-                        if count > 10:
-                            self.q.put(('push', None)) # enqueue a push command
-                            count = 0
-                        
-                    if cmd == 'quit' or cmd == 'push':
-                        # push dirty samples to opentsdb
-                        cr = db.cursor()
-                        sql = "SELECT * from wattnode WHERE DIRTY = 1 LIMIT 30"
-                        
-                        wl = []
-                        idlist= []
-                        for d in cr.execute(sql):                            
-                            f = zip ( ('id', 'serialnumber', 'ts', 'dirty')+ tuple(wattNodeLogVars), d)
-                            d = {k:v for k,v in f}
-                            idlist += [d['id']]
-                            for param in wattNodeLogVars: 
-                                wl += [
-                                       {'metric': 'wattnode_{}'.format(d['serialnumber']),
-                                        'timestamp': d['ts'],
-                                        'value': d[param],
-                                        'tags': {'parameter': param},
-                                        }
-                                       ]
-                        if len(wl) > 0:
-                            r = requests.post('http://{}:4242/api/put?details'.format(self.url),
-                                              data = json.dumps(wl))
-                            if r.status_code != requests.codes.ok:                                
-                                self.log.error('Unknown error:' + r.text)                                                                
-                            else:
-                                self.log.info("pushed {} params to opentsdb".format(len(wl)))
-                                rslt = json.loads(r.text)                            
-                                
-                                if len(rslt['errors']) > 0:
-                                    self.log.error('query was: '+ json.dumps(wl))
-                                    self.log.error('errors in pushing data')
-                                    self.log.error(rslt)                                    
-                                                                
-                                #update dirty flags, skip error check from opentsdb for now.
-                                for i in idlist:
-                                    #self.log.warn("UPDATE wattnode SET DIRTY=0 WHERE ID={}".format(i))
-                                    cr.execute("UPDATE wattnode SET DIRTY=0 WHERE ID=?", (i,))
-                                db.commit()                            
+                        if len(commands) == 0:
+                            time.sleep(random.randint(1,10))
+                        else:
+                            for cmd,data in commands:                                               
+                                if cmd == "log_data":
+                                   datas += [data]
                                     
-                            c = cr.execute("SELECT COUNT(*) FROM wattnode WHERE DIRTY = 1").fetchone()[0]
-                            
-                            if (c > 10):
-                                self.q.put(('push', None)) # enqueue a push command
+                                if cmd == 'quit' or cmd == 'push':
+                                    pass  # legacy
+                                
+                            if len(datas) > 0:
+                                # push dirty samples to opentsdb
 
-                except Exception as x:
-                    self.log.error(traceback.format_exc())
+                                wl = []
+                                #idlist= []
+                                for d in datas:                            
+                                    #f = zip ( ('id', 'serialnumber', 'ts', 'dirty')+ tuple(wattNodeLogVars), d)
+                                    #d = {k:v for k,v in f}
+                                    #idlist += [d['id']]
+                                    for param in wattNodeLogVars: 
+                                        wl += [
+                                               {'metric': 'wattnode_{}'.format(self.serno),
+                                                'timestamp': getUTCTimestampS(d['time']),
+                                                'value': d[param],
+                                                'tags': {'parameter': param},
+                                                }
+                                               ]
+                                if len(wl) > 0:
+                                    self.log.debug("got {} params to push to opentsdb".format(len(wl)))
+                                    
+                                    rt_ct = 0
+                                    rt_tm = 22
+                                    success = False
+                                    while not success and rt_ct < 10:
+                                        try:
+                                            r = requests.post('http://{}:4242/api/put?details'.format(self.url),
+                                                              data = json.dumps(wl), timeout = rt_tm)
+                                            success = True
+                                        except requests.Timeout:
+                                            rt_ct += 1
+                                            rt_tm *= 1.76
+                                            self.log.error("Timeout while talking to server, retry {} of {} with timeout {}".format(rt_ct, 10, rt_tm))
+    
+                                    if not success or r.status_code != requests.codes.ok:
+                                        if success:                                
+                                            self.log.error('Unknown error:' + r.text)
+                                        
+                                        # put everything back on the queue
+                                        for d in datas:
+                                            self.q.put( ('log_data', d) )
+                                    else:
+                                        self.log.info("pushed {} params to opentsdb".format(len(wl)))
+                                        rslt = json.loads(r.text)                            
+                                        
+                                        if len(rslt['errors']) > 0:
+                                            self.log.error('query was: '+ json.dumps(wl))
+                                            self.log.error('errors in pushing data')
+                                            self.log.error(rslt)                                    
+
+                                    if self.q.empty():
+                                        # close the connection if we don't expect another put for a while
+                                        r.close()
+    
+                    except Exception as x:
+                        self.log.critical(x)
+                        self.log.critical(traceback.format_exc())
+            finally:
+                db.close()
         finally:
-            db.close()
-        
-    def close(self):
-        
+            self.queue_running = False
+            self.log.critical("thread exit")   
+    def close(self):       
         self.shutdownEvt.set()
         self.q.put( ('quit', None) )
-        self.join()
+        self.join(5)
+                
+class dblogger():
+    def __init__(self, config, serno):
+                      
+        self.url = config.get('db', 'url')
+        self.log = logging.getLogger(__name__)
+        self.log.info("OpenTSDB logger activated on wn_{}".format(serno))
+        self.serno = serno
+                        
+        self.localdb = config.get('db', 'localdb')
+        
+        self.thread = None # opentsdb_thread(self.url, self.localdb)
+
+    def close(self):
+        if self.thread and self.thread.queue_running:
+            self.thread.close()
     
     def logit(self, data):
-        
-        self.q.put( ('log_data', data) )
-        
+        if not self.thread or  not self.thread.queue_running:
+            self.thread = opentsdb_thread(self.serno, self.url, self.localdb)
+            
+        self.thread.q.put( ('log_data', data) )        
         
 if __name__=="__main__":
     print pywattnodeapi.__wattNodeAdvancedVars

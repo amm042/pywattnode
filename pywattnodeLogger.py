@@ -71,8 +71,8 @@ def runlog(p, wnconfig, config, log, tty, serno):
                 #output += "\n".join( ["%20s = %9.3f"%(key,data[key]) for key in __wattNodeAdvancedVars])
                 db.logit(data)
 
-            if tty:
-                log.info(output)
+            #if tty:
+                #log.info(output)
 
             sleep = period_sec - (datetime.utcnow() - start)
             sleep_s = (sleep.days * 86400) + sleep.seconds + (sleep.microseconds / 1000000.0)

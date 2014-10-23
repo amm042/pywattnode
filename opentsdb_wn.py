@@ -36,6 +36,8 @@ class opentsdb_thread(threading.Thread):
         self.log = logging.getLogger(__name__)
         self.log.setLevel(logging.DEBUG)
         self.url = url
+        
+        self.log.info("opentsdb url: {}".format(self.url))
         self.localdb = localdb
         self.serno = serno
                 
@@ -108,7 +110,7 @@ class opentsdb_thread(threading.Thread):
                                     success = False
                                     while not success and rt_ct < 10:
                                         try:
-                                            r = requests.post('http://{}:4242/api/put?details'.format(self.url),
+                                            r = requests.post('{}/put?details'.format(self.url),
                                                               data = json.dumps(wl), timeout = rt_tm)
                                             success = True
                                         except requests.Timeout:

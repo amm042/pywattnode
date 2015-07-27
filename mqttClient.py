@@ -33,6 +33,6 @@ class mqClient():
         if self.client:
             
             s = json.dumps(data, default=datetime.datetime.isoformat)
-            self.log.info("send: " + s)
+            self.log.debug("send: " + s)
             self.client.publish(self.topic, s)
             

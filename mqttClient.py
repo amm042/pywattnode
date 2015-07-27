@@ -1,7 +1,7 @@
     
 import logging
 import paho.mqtt.client as mq
-import json
+import simplejson as json
 
 class mqClient():
     def __init__(self, config, serno):

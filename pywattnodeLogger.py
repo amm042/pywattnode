@@ -38,7 +38,7 @@ def runlog(p, wnconfig, config, log, tty, serno):
     try:
         period_sec =  timedelta(seconds = config.getint('wattnode', 'period_sec'))
 
-        mq = mqclient = mqClient(cofnig, serno)
+        mq = mqClient(cofnig, serno)
         
         #regs = []
         #for i in range(0, len(wnconfig)):

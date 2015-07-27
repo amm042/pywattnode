@@ -9,7 +9,7 @@ class mqClient():
         self.topic = 'wn_{}/raw'.format(serno)
             
         if config.has_section('mqtt'):                    
-            self.broker_url = config.get('db', 'broker')
+            self.broker_url = config.get('mqtt', 'broker')
             self.log.info("MQTT logging enabled to broker: {}".format(self.broker_url))
             
             self.client = mq.Client()
@@ -27,5 +27,5 @@ class mqClient():
             self.client = None
             
     def pub(self, data):
-        
-        self.client.publish(self.topic, data)
+        if self.client:
+            self.client.publish(self.topic, data)

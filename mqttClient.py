@@ -2,6 +2,8 @@
 import logging
 import paho.mqtt.client as mq
 import simplejson as json
+import datetime
+
 
 class mqClient():
     def __init__(self, config, serno):
@@ -30,7 +32,7 @@ class mqClient():
     def pub(self, data):
         if self.client:
             
-            s = json.dumps(data)
+            s = json.dumps(data, default=datetime.datetime.isoformat)
             self.log.info("send: " + s)
             self.client.publish(self.topic, s)
             

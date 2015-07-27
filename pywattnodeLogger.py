@@ -17,6 +17,8 @@ import logging.handlers
 from mysqldblog import dblogger as mysql_dblogger
 from couchdblog import dblogger as couch_dblogger
 
+from mqttClient import mqClient
+
 def runlog(p, wnconfig, config, log, tty, serno):
 
     dbtype = config.get('db', 'dbtype')
@@ -36,6 +38,8 @@ def runlog(p, wnconfig, config, log, tty, serno):
     try:
         period_sec =  timedelta(seconds = config.getint('wattnode', 'period_sec'))
 
+        mq = mqclient = mqClient(cofnig, serno)
+        
         #regs = []
         #for i in range(0, len(wnconfig)):
             #t = config.get('wattnode%d'%(i+1), 'regs')
@@ -70,6 +74,7 @@ def runlog(p, wnconfig, config, log, tty, serno):
                     output += "\n"
                 #output += "\n".join( ["%20s = %9.3f"%(key,data[key]) for key in __wattNodeAdvancedVars])
                 db.logit(data)
+                mq.pub(data)
 
             #if tty:
                 #log.info(output)
@@ -83,6 +88,7 @@ def runlog(p, wnconfig, config, log, tty, serno):
                 log.warning('took %s seconds; not meeting timing spec.', period_sec - sleep)
     finally:
         db.close()
+        mq.close()
 
 def createLogger(logfile):
     log = logging.getLogger()
@@ -100,7 +106,10 @@ def createLogger(logfile):
                 tty = True
         except:
             tty = False
-
+        
+        
+        tty = False
+        
         if tty:
             # create console handler
             ch = logging.StreamHandler()
@@ -185,7 +194,7 @@ def detectDev(log,str):
 
 
 def main():
-    log, tty = createLogger('pywattnode.log')#createLogger('/var/log/pywattnode.log')
+    log, tty = createLogger('/home/alan/pywattnode.log')#createLogger('/var/log/pywattnode.log')
     config = readConfig(log, '/etc/pywattnode.conf')
 
     port_prefix = config.get('wattnode', 'port')
@@ -199,6 +208,8 @@ def main():
         for n in req_opts:
             cfg[n] = config.getint('wattnode%d'%(i), n)
         wnconfig.append(cfg)
+
+    
 
 #---- main run loop
     while True:

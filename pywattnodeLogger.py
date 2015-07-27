@@ -35,6 +35,9 @@ def runlog(p, wnconfig, config, log, tty, serno):
     else:
         raise Exception("dbtype ('%s') not supported."%(dbtype))
     log.info('database connected')
+    
+    mq = None
+    
     try:
         period_sec =  timedelta(seconds = config.getint('wattnode', 'period_sec'))
 
@@ -88,7 +91,8 @@ def runlog(p, wnconfig, config, log, tty, serno):
                 log.warning('took %s seconds; not meeting timing spec.', period_sec - sleep)
     finally:
         db.close()
-        mq.close()
+        if mq:
+            mq.close()
 
 def createLogger(logfile):
     log = logging.getLogger()

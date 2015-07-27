@@ -16,14 +16,21 @@ class mqClient():
             self.log.info("MQTT logging enabled to broker: {}".format(self.broker_url))
             
             self.client = mq.Client()
-            
+            self.client.connect_async(self.broker_url)
             self.client.loop_start()
+            
+            self.client.on_connect = self.on_connect
             
         else:
             self.client = None
             self.broker_url = None
             self.log.info("MQTT not enabled (set [mqtt] broker = ... )")
             
+            
+    def on_connect(selfclient, userdata, flags, rc):
+        
+        self.log.info("MQTT connected with result: {}".format(rc))
+        
     def close(self):
         if self.client:
             self.client.loop_stop()

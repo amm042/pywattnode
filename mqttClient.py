@@ -26,7 +26,7 @@ class mqClient():
             self.log.info("MQTT not enabled (set [mqtt] broker = ... )")
             
             
-    def on_connect(selfclient, userdata, flags, rc):
+    def on_connect(self, client, userdata, flags, rc):
         
         self.log.info("MQTT connected with result: {}".format(rc))
         

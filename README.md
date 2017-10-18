@@ -5,8 +5,12 @@ Python interface and logger for the wattnode energy meter (modbus)
 
 Installing as an init script 
 ----------
+Pre-Requisites:
+Following packages need to be pre-installed
+sudo pip install paho-mqtt
+sudo pip install simplejson
 
-This assumes pywattnode is cloned in /home/pi/pywattnode
+In addition this assumes pywattnode is cloned in /home/pi/pywattnode and pip is already installed
 
     $ sudo ln -s /home/pi/pywattnode /usr/local/pyWattnode
     $ sudo cp pywattnode/pywattnode /etc/init.d
